@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'tela_pesquisa.dart';
 
 void main() {
   runApp(const ChefDeBolsoApp());
@@ -16,12 +17,13 @@ class ChefDeBolsoApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.orange),
         useMaterial3: true,
       ),
+      // a página inicial agora é a HomePage, não a tela de pesquisa
       home: const HomePage(),
     );
   }
 }
 
-// --- TELA INICIAL ---
+// TELA INICIAL
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -32,6 +34,19 @@ class HomePage extends StatelessWidget {
         title: const Text('Chef de Bolso - Receitas'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         centerTitle: true,
+        // adiciona o botão de pesquisa na barra superior
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              // navega para a tela de pesquisa
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const TelaPesquisa()),
+              );
+            },
+          )
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -63,7 +78,7 @@ class HomePage extends StatelessWidget {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Navega para a tela de formulário quando o botão é clicado
+          // navega para a tela de formulário quando o botão é clicado
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const FormularioReceitaPage()),
@@ -76,7 +91,7 @@ class HomePage extends StatelessWidget {
   }
 }
 
-// Widget da lista (mantido igual)
+// widget da lista (mantido igual)
 class ReceitaItem extends StatelessWidget {
   final String titulo;
   final String tempoPreparo;
@@ -136,7 +151,7 @@ class ReceitaItem extends StatelessWidget {
   }
 }
 
-//aula 03
+// aula 03
 // precisa ser StatefulWidget pois a tela muda (mostra/esconde erros) enquanto o usuário digita
 class FormularioReceitaPage extends StatefulWidget {
   const FormularioReceitaPage({super.key});
@@ -151,7 +166,6 @@ class _FormularioReceitaPageState extends State<FormularioReceitaPage> {
   String? mensagemErro;
 
   void validarNome(String valor) {
-
     setState(() {
       if (nomeReceitaController.text.trim().isEmpty) {
         mensagemErro = "Informe o nome da receita!";
@@ -171,7 +185,7 @@ class _FormularioReceitaPageState extends State<FormularioReceitaPage> {
 
     final texto = nomeReceitaController.text.trim();
 
-    // Mostra a notificação (SnackBar) na tela
+    // mostra a notificação (SnackBar) na tela
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text("Receita salva com sucesso: $texto"),
@@ -180,13 +194,12 @@ class _FormularioReceitaPageState extends State<FormularioReceitaPage> {
     );
 
     nomeReceitaController.clear();
-
   }
 
   @override
   void dispose() {
     // é essencial descartar o controller para liberar memória quando a tela for fechada
-    //"sair da sala e desligar tudo enquanto estiver fora"
+    // "sair da sala e desligar tudo enquanto estiver fora"
     nomeReceitaController.dispose();
     super.dispose();
   }
@@ -207,7 +220,6 @@ class _FormularioReceitaPageState extends State<FormularioReceitaPage> {
               decoration: InputDecoration(
                 labelText: "Nome da Receita",
                 border: const OutlineInputBorder(),
-
                 errorText: mensagemErro,
               ),
               onChanged: validarNome,
