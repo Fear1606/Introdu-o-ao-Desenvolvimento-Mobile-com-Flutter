@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'tela_pesquisa.dart';
+import 'receitas_api_page.dart';
 
 void main() {
   runApp(const ChefDeBolsoApp());
@@ -23,7 +24,7 @@ class ChefDeBolsoApp extends StatelessWidget {
   }
 }
 
-// TELA INICIAL
+// tela inicial
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -34,18 +35,30 @@ class HomePage extends StatelessWidget {
         title: const Text('Chef de Bolso - Receitas'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         centerTitle: true,
-        // adiciona o botão de pesquisa na barra superior
+        // adiciona os botões de navegação na barra superior
         actions: [
+          // navega para a tela de receitas da api
+          IconButton(
+            icon: const Icon(Icons.public),
+            tooltip: 'Receitas Online',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ReceitasApiPage()),
+              );
+            },
+          ),
+          // navega para a tela de pesquisa
           IconButton(
             icon: const Icon(Icons.search),
+            tooltip: 'Pesquisar',
             onPressed: () {
-              // navega para a tela de pesquisa
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const TelaPesquisa()),
               );
             },
-          )
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -199,7 +212,6 @@ class _FormularioReceitaPageState extends State<FormularioReceitaPage> {
   @override
   void dispose() {
     // é essencial descartar o controller para liberar memória quando a tela for fechada
-    // "sair da sala e desligar tudo enquanto estiver fora"
     nomeReceitaController.dispose();
     super.dispose();
   }
