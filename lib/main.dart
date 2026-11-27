@@ -1,6 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'tela_pesquisa.dart';
-import 'receitas_api_page.dart';
+import 'package:http/http.dart' as http;
+import 'receita_model.dart';
+import 'favoritos_store.dart';
+import 'receita_detalhes_page.dart';
+import 'favoritos_page.dart';
 
 void main() {
   runApp(const ChefDeBolsoApp());
@@ -18,201 +23,123 @@ class ChefDeBolsoApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.orange),
         useMaterial3: true,
       ),
-      // a página inicial agora é a HomePage, não a tela de pesquisa
       home: const HomePage(),
     );
   }
 }
 
-// tela inicial
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chef de Bolso - Receitas'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        centerTitle: true,
-        // adiciona os botões de navegação na barra superior
-        actions: [
-          // navega para a tela de receitas da api
-          IconButton(
-            icon: const Icon(Icons.public),
-            tooltip: 'Receitas Online',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ReceitasApiPage()),
-              );
-            },
-          ),
-          // navega para a tela de pesquisa
-          IconButton(
-            icon: const Icon(Icons.search),
-            tooltip: 'Pesquisar',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const TelaPesquisa()),
-              );
-            },
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text(
-              'Lanches Práticos',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 16),
-            ReceitaItem(
-              titulo: 'Vitamina Reforçada de Banana',
-              tempoPreparo: '5 min',
-              icone: Icons.blender,
-            ),
-            ReceitaItem(
-              titulo: 'Suco de Uva Integral Rápido',
-              tempoPreparo: '2 min',
-              icone: Icons.local_drink,
-            ),
-            ReceitaItem(
-              titulo: 'Tapioca Simples',
-              tempoPreparo: '10 min',
-              icone: Icons.breakfast_dining,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // navega para a tela de formulário quando o botão é clicado
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const FormularioReceitaPage()),
-          );
-        },
-        tooltip: 'Cadastrar Receita',
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
+  State<HomePage> createState() => _HomePageState();
 }
 
-// widget da lista (mantido igual)
-class ReceitaItem extends StatelessWidget {
-  final String titulo;
-  final String tempoPreparo;
-  final IconData icone;
-
-  const ReceitaItem({
-    super.key,
-    required this.titulo,
-    required this.tempoPreparo,
-    required this.icone,
-  });
+class _HomePageState extends State<HomePage> {
+  final buscaController = TextEditingController();
+  List<Receita> receitas = [];
+  bool carregando = false;
+  String? erroRede;
+  String? erroCampoBusca;
+  String termoPesquisado = '';
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.2),
-            spreadRadius: 1,
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Icon(icone, size: 40, color: Colors.orange),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                titulo,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  const Icon(Icons.timer, size: 14, color: Colors.grey),
-                  const SizedBox(width: 4),
-                  Text(
-                    tempoPreparo,
-                    style: const TextStyle(color: Colors.grey, fontSize: 13),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
+  void initState() {
+    super.initState();
+    // inicia o carregamento das receitas na primeira abertura
+    buscarReceitas();
   }
-}
 
-// aula 03
-// precisa ser StatefulWidget pois a tela muda (mostra/esconde erros) enquanto o usuário digita
-class FormularioReceitaPage extends StatefulWidget {
-  const FormularioReceitaPage({super.key});
+  // busca listagem geral ou pesquisa remota na dummyjson
+  Future<void> buscarReceitas({String consulta = ''}) async {
+    // evita requisicoes concorrentes se ja estiver carregando
+    if (carregando) return;
 
-  @override
-  State<FormularioReceitaPage> createState() => _FormularioReceitaPageState();
-}
-
-class _FormularioReceitaPageState extends State<FormularioReceitaPage> {
-  // controlador para capturar o texto digitado
-  final nomeReceitaController = TextEditingController();
-  String? mensagemErro;
-
-  void validarNome(String valor) {
     setState(() {
-      if (nomeReceitaController.text.trim().isEmpty) {
-        mensagemErro = "Informe o nome da receita!";
-      } else if (valor.trim().length < 3) {
-        mensagemErro = "O nome deve ter ao menos 3 caracteres";
-      } else {
-        mensagemErro = null;
-      }
+      carregando = true;
+      erroRede = null;
+      termoPesquisado = consulta;
     });
+
+    try {
+      final Uri url;
+      if (consulta.isEmpty) {
+        url = Uri.https('dummyjson.com', '/recipes');
+      } else {
+        url = Uri.https('dummyjson.com', '/recipes/search', {'q': consulta});
+      }
+
+      final resposta = await http.get(url).timeout(const Duration(seconds: 10));
+
+      if (resposta.statusCode != 200) {
+        throw Exception('HTTP ${resposta.statusCode}');
+      }
+
+      final dados = jsonDecode(resposta.body);
+
+      // valida se o corpo veio no formato esperado
+      if (dados is! Map<String, dynamic> || dados['recipes'] is! List) {
+        throw const FormatException('formato de resposta invalido');
+      }
+
+      final listaBruta = dados['recipes'] as List;
+      final listaValidada = listaBruta
+          .map((item) => Receita.fromJson(item as Map<String, dynamic>))
+          .toList();
+
+      setState(() {
+        receitas = listaValidada;
+        carregando = false;
+      });
+    } on TimeoutException {
+      setState(() {
+        erroRede = 'tempo limite esgotado. tente novamente.';
+        carregando = false;
+      });
+    } on FormatException catch (e) {
+      setState(() {
+        erroRede = e.message;
+        carregando = false;
+      });
+    } catch (_) {
+      setState(() {
+        erroRede = 'falha de conexao ao buscar receitas.';
+        carregando = false;
+      });
+    }
   }
 
-  void salvarReceita() {
-    validarNome(nomeReceitaController.text);
+  // valida o campo antes de disparar a pesquisa remota
+  void executarPesquisa() {
+    final texto = buscaController.text.trim();
 
-    // se houver erro, para a execução aqui e não salva
-    if (mensagemErro != null) return;
+    if (texto.isEmpty) {
+      setState(() {
+        erroCampoBusca = 'digite o nome de uma receita';
+      });
+      return;
+    }
 
-    final texto = nomeReceitaController.text.trim();
+    setState(() {
+      erroCampoBusca = null;
+    });
+    FocusScope.of(context).unfocus();
+    buscarReceitas(consulta: texto);
+  }
 
-    // mostra a notificação (SnackBar) na tela
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("Receita salva com sucesso: $texto"),
-        backgroundColor: Colors.green,
-      ),
-    );
-
-    nomeReceitaController.clear();
+  // limpa o filtro e volta para a listagem inicial
+  void limparPesquisa() {
+    buscaController.clear();
+    setState(() {
+      erroCampoBusca = null;
+    });
+    FocusScope.of(context).unfocus();
+    buscarReceitas();
   }
 
   @override
   void dispose() {
-    // é essencial descartar o controller para liberar memória quando a tela for fechada
-    nomeReceitaController.dispose();
+    buscaController.dispose();
     super.dispose();
   }
 
@@ -220,33 +147,251 @@ class _FormularioReceitaPageState extends State<FormularioReceitaPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Nova Receita"),
+        title: const Text('Chef de Bolso'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          // acesso aos favoritos mostrando a quantidade salva
+          ListenableBuilder(
+            listenable: favoritosStore,
+            builder: (context, _) {
+              final qtd = favoritosStore.itens.length;
+              return IconButton(
+                icon: Badge(
+                  isLabelVisible: qtd > 0,
+                  label: Text('$qtd'),
+                  child: const Icon(Icons.favorite),
+                ),
+                tooltip: 'Favoritos',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const FavoritosPage()),
+                  );
+                },
+              );
+            },
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            TextField(
-              controller: nomeReceitaController,
-              decoration: InputDecoration(
-                labelText: "Nome da Receita",
-                border: const OutlineInputBorder(),
-                errorText: mensagemErro,
-              ),
-              onChanged: validarNome,
+      body: Column(
+        children: [
+          // area de pesquisa remota
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                TextField(
+                  controller: buscaController,
+                  enabled: !carregando,
+                  decoration: InputDecoration(
+                    labelText: 'Pesquisar receita por nome',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.search),
+                    errorText: erroCampoBusca,
+                    suffixIcon: (buscaController.text.isNotEmpty ||
+                        termoPesquisado.isNotEmpty)
+                        ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      tooltip: 'Limpar busca',
+                      onPressed: carregando ? null : limparPesquisa,
+                    )
+                        : null,
+                  ),
+                  onSubmitted: (_) => executarPesquisa(),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: carregando ? null : executarPesquisa,
+                        child: const Text('Pesquisar'),
+                      ),
+                    ),
+                    if (termoPesquisado.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: carregando ? null : limparPesquisa,
+                        child: const Text('Voltar a listagem'),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: salvarReceita,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(50), // faz o botão ocupar a largura toda
-              ),
-              child: const Text("Salvar Receita"),
-            )
-          ],
-        ),
+          ),
+
+          // area principal de exibicao
+          Expanded(child: _construirConteudo()),
+        ],
       ),
+    );
+  }
+
+  Widget _construirConteudo() {
+    // feedback visual de carregamento
+    if (carregando) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    // estado de erro com opcao de nova tentativa
+    if (erroRede != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.wifi_off, size: 48, color: Colors.red),
+              const SizedBox(height: 12),
+              Text(
+                erroRede!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => buscarReceitas(consulta: termoPesquisado),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Tentar novamente'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // distingue busca sem correspondencia de erro de rede
+    if (receitas.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.search_off, size: 48, color: Colors.grey),
+              const SizedBox(height: 12),
+              Text(
+                termoPesquisado.isNotEmpty
+                    ? 'nenhuma receita encontrada para "$termoPesquisado"'
+                    : 'nenhuma receita disponivel no momento',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16),
+              ),
+              if (termoPesquisado.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                OutlinedButton(
+                  onPressed: limparPesquisa,
+                  child: const Text('Mostrar todas as receitas'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    // listagem com rolagem
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      itemCount: receitas.length,
+      itemBuilder: (context, index) {
+        final receita = receitas[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () {
+              // abre detalhes mantendo o contexto da pesquisa ao voltar
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ReceitaDetalhesPage(receita: receita),
+                ),
+              );
+            },
+            child: Row(
+              children: [
+                // miniatura com fallback se a imagem falhar
+                SizedBox(
+                  width: 95,
+                  height: 95,
+                  child: (receita.image != null && receita.image!.isNotEmpty)
+                      ? Image.network(
+                    receita.image!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _miniFallback(),
+                  )
+                      : _miniFallback(),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          receita.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(Icons.timer, size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(
+                              receita.tempoTotalTexto,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            if (receita.rating != null) ...[
+                              const SizedBox(width: 12),
+                              const Icon(Icons.star, size: 14, color: Colors.amber),
+                              const SizedBox(width: 2),
+                              Text(
+                                receita.rating!.toStringAsFixed(1),
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // botao rapido de favoritar sincronizado
+                ListenableBuilder(
+                  listenable: favoritosStore,
+                  builder: (context, _) {
+                    final salvo = favoritosStore.ehFavorito(receita.id);
+                    return IconButton(
+                      icon: Icon(
+                        salvo ? Icons.favorite : Icons.favorite_border,
+                        color: salvo ? Colors.red : Colors.grey,
+                      ),
+                      onPressed: () => favoritosStore.alternarFavorito(receita),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _miniFallback() {
+    return Container(
+      color: Colors.orange.shade50,
+      child: const Icon(Icons.restaurant_menu, color: Colors.orange),
     );
   }
 }
